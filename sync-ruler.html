@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sync Ruler</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{ --ink:#f5f5f5; --dim:#8a8a8a; --hi:#ffd60a; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#000;color:var(--ink);height:100vh;overflow:hidden;
+    font:400 15px/1.5 -apple-system,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    display:flex;flex-direction:column;
+  }
+  #timer{
+    flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    font-variant-numeric:tabular-nums;font-weight:800;
+    font-size:min(30vw,42vh);line-height:.9;letter-spacing:-.02em;
+    text-shadow:0 0 30px rgba(255,255,255,.18);
+  }
+  #timer .ms{color:var(--hi)}
+  #bar{height:8vh;flex:none;display:flex}
+  #bar i{flex:1;background:#141414;border-right:1px solid #000}
+  #bar i.on{background:var(--hi)}
+
+  #panel{
+    background:#0d0d0f;border-top:1px solid #1e1e22;flex:none;
+    padding:14px 20px;display:flex;gap:28px;align-items:flex-start;
+    flex-wrap:nowrap;max-height:46vh;overflow:auto;
+  }
+  #panel.off{display:none}
+  ol{margin-left:18px;color:#c9c9cd;flex:1;min-width:0;font-size:14px}
+  ol li{margin:2px 0}
+  ol b{color:#fff}
+  .calc{width:250px;flex:none;order:-1}
+  .calc h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:8px;font-weight:700}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .row label{width:86px;font-size:13px;color:#c9c9cd}
+  input{
+    width:104px;background:#1c1c20;border:1px solid #2e2e34;border-radius:7px;
+    color:#fff;font:600 16px/1 ui-monospace,Consolas,monospace;padding:8px;text-align:center;
+  }
+  input:focus{outline:2px solid var(--hi);outline-offset:1px}
+  #out{margin-top:10px;font-size:15px;color:var(--dim)}
+  #out b{display:block;font-size:27px;color:var(--hi);font-weight:800;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:#6e6e74;margin-top:6px;max-width:26em}
+  kbd{background:#1c1c20;border:1px solid #2e2e34;border-radius:4px;padding:1px 5px;font:600 12px/1 inherit;color:#fff}
+</style>
+</head>
+<body>
+
+<div id="timer"><span id="sec">0</span>.<span class="ms" id="ms">000</span></div>
+<div id="bar"></div>
+
+<div id="panel">
+  <ol>
+    <li>Get the phone mirroring as usual, Streamlabs open with the camera scene showing.</li>
+    <li>Put this window and the <b>Streamlabs preview</b> side by side on this screen.</li>
+    <li>Point the phone at this screen so <b>these big numbers fill the shot</b>.</li>
+    <li>Press <kbd>PrtScn</kbd> (or run <b>measure-sync.ps1</b>) to freeze both at the same instant.</li>
+    <li>In that screenshot: the big number is <b>now</b>, the one inside the Streamlabs preview is <b>then</b>. Type both below.</li>
+    <li>Streamlabs &rarr; Mixer &rarr; gear &rarr; <b>Advanced Audio Settings</b> &rarr; put the answer in <b>Sync Offset</b> on your <b>desk audio</b> source.</li>
+  </ol>
+
+  <div class="calc">
+    <h2>Work it out</h2>
+    <div class="row"><label for="now">Big number</label><input id="now" placeholder="7.482" inputmode="decimal"></div>
+    <div class="row"><label for="then">In Streamlabs</label><input id="then" placeholder="7.061" inputmode="decimal"></div>
+    <div id="out"><b>&mdash;</b>Sync Offset, milliseconds</div>
+    <p class="hint">Positive delays the audio to meet the late picture. Take three
+       readings; if they differ by more than ~50&nbsp;ms the wifi is the problem,
+       not the offset. <kbd>H</kbd> hides this panel.</p>
+  </div>
+</div>
+
+<script>
+'use strict';
+var sec = document.getElementById('sec'), ms = document.getElementById('ms');
+var bar = document.getElementById('bar'), cells = [];
+for (var i = 0; i < 50; i++){ var c = document.createElement('i'); bar.appendChild(c); cells.push(c); }
+
+var lastLit = -1;
+function tick(){
+  var t = performance.now() % 10000;           // rolls every 10 s
+  var s = Math.floor(t / 1000);
+  var m = Math.floor(t % 1000);
+  sec.textContent = s;
+  ms.textContent  = ('00' + m).slice(-3);
+
+  // a 50-cell sweep: coarse, but readable even when the numbers smear
+  var lit = Math.floor(t / 200);
+  if (lit !== lastLit){
+    for (var i = 0; i < cells.length; i++) cells[i].className = (i <= lit) ? 'on' : '';
+    lastLit = lit;
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+
+var now = document.getElementById('now'), then = document.getElementById('then');
+var out = document.getElementById('out').querySelector('b');
+function calc(){
+  var a = parseFloat(now.value), b = parseFloat(then.value);
+  if (isNaN(a) || isNaN(b)){ out.textContent = '—'; return; }
+  var d = a - b;
+  if (d < 0) d += 10;                          // the counter wrapped between the two
+  out.textContent = Math.round(d * 1000) + ' ms';
+}
+now.addEventListener('input', calc);
+then.addEventListener('input', calc);
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'h' || e.key === 'H'){
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    document.getElementById('panel').classList.toggle('off');
+  }
+  if (e.key === 'f' || e.key === 'F'){
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen();
+  }
+});
+</script>
+</body>
+</html>

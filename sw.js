@@ -2,7 +2,7 @@
    The church wifi may have no internet at all (and the laptop's Mobile Hotspot
    often has none either), so once the phone has opened this app on any network
    it must keep working with none. Bump CACHE on every edit. */
-var CACHE = 'church-camera-v5';
+var CACHE = 'church-camera-v6';
 var FILES = [
   './',
   './index.html',
