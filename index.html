@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Church Camera</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Church Camera">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+  :root{
+    --rail-fg:#8d8d8d;
+    --rail-hi:#f2f2f2;
+    --ok:#32d74b;
+    --warn:#ff9f0a;
+    --bad:#ff453a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{
+    height:100%;width:100%;background:#000;overflow:hidden;
+    font:500 11px/1.25 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    color:var(--rail-fg);
+    -webkit-user-select:none;user-select:none;
+    -webkit-touch-callout:none;
+  }
+
+  /* ---- the picture. In MIRROR mode nothing outside this reaches the stream. ---- */
+  #stage{position:fixed;overflow:hidden;background:#000}
+  #cam{width:100%;height:100%;object-fit:cover;display:block;background:#000}
+
+  #align{position:absolute;inset:0;display:none;pointer-events:none}
+  #align.on{display:block}
+  #align .edge{position:absolute;inset:0;border:2px solid #ff00d4}
+  #align .third{position:absolute;background:rgba(255,255,255,.28)}
+  #align .mid{position:absolute;background:rgba(255,0,212,.9)}
+
+  /* ---- operator rails ---- */
+  .rail{
+    position:fixed;top:0;bottom:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:space-between;
+    padding:calc(5px + env(safe-area-inset-top)) 4px calc(5px + env(safe-area-inset-bottom));
+    gap:4px;overflow:hidden;
+  }
+  #railL{left:0;padding-left:calc(4px + env(safe-area-inset-left))}
+  #railR{right:0;padding-right:calc(4px + env(safe-area-inset-right))}
+  .rail.hide{visibility:hidden}
+  .grp{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center}
+
+  button{
+    font:600 11px/1 -apple-system,system-ui,sans-serif;color:var(--rail-hi);
+    background:#1c1c1e;border:0;border-radius:8px;
+    width:100%;min-height:38px;padding:5px 2px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  }
+  button:active{background:#2c2c2e}
+  button[aria-pressed="true"]{background:#0a4d2b;color:#fff}
+  button[disabled]{opacity:.28}
+  button.gone{display:none}
+  button small{font-size:9px;font-weight:500;color:var(--rail-fg);letter-spacing:.02em}
+  button[aria-pressed="true"] small{color:#b8e6c8}
+
+  #lockBtn[aria-pressed="true"]{background:#5a1020;color:#fff}
+  #lockBtn[aria-pressed="true"] small{color:#f5b8c4}
+  #liveBtn{background:#8a1020;color:#fff}
+  #liveBtn small{color:#f5b8c4}
+  #liveBtn[aria-pressed="true"]{background:#0a4d2b}
+  #liveBtn[aria-pressed="true"] small{color:#b8e6c8}
+
+  .stat{width:100%;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .stat b{display:block;color:var(--rail-hi);font-size:13px;font-weight:600}
+  .stat span{font-size:9px}
+  #crop{font-size:8.5px;line-height:1.35;color:#5c5c5e}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#48484a;vertical-align:middle;margin-right:3px}
+  .dot.live{background:var(--ok)}
+  .dot.warn{background:var(--warn)}
+  .dot.bad{background:var(--bad)}
+
+  /* ---- overlays ---- */
+  .sheet{
+    position:fixed;inset:0;background:#000;z-index:20;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:13px;padding:20px calc(24px + env(safe-area-inset-left)) 20px calc(24px + env(safe-area-inset-right));
+    text-align:center;overflow:auto;
+  }
+  .sheet.off{display:none}
+  .sheet h1{font-size:19px;font-weight:700;color:#fff;letter-spacing:-.01em}
+  .sheet p{font-size:13px;line-height:1.5;color:#98989d;max-width:32em}
+  .sheet p b{color:#fff;font-weight:600}
+  .sheet button{width:auto;min-width:180px;min-height:48px;font-size:15px;background:#fff;color:#000;border-radius:12px}
+  .sheet button:active{background:#d8d8d8}
+  .sheet button.ghost{background:#1c1c1e;color:#f2f2f2;min-width:120px;min-height:42px;font-size:13px}
+  .err{color:var(--bad);font-size:12px;max-width:32em}
+  .rowset{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+
+  label.field{display:block;text-align:left;max-width:26em;width:100%}
+  label.field span{display:block;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6e6e74;margin-bottom:5px;font-weight:700}
+  input,select{
+    width:100%;background:#1c1c20;border:1px solid #2e2e34;border-radius:9px;
+    color:#fff;font:500 16px/1 ui-monospace,Menlo,monospace;padding:12px;
+  }
+  input:focus,select:focus{outline:2px solid #0a84ff;outline-offset:1px}
+  .note{font-size:11px;color:#6e6e74;margin-top:5px;line-height:1.45}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" playsinline autoplay muted></video>
+  <div id="align">
+    <div class="edge"></div>
+    <div class="third" style="left:33.333%;top:0;bottom:0;width:1px"></div>
+    <div class="third" style="left:66.666%;top:0;bottom:0;width:1px"></div>
+    <div class="third" style="top:33.333%;left:0;right:0;height:1px"></div>
+    <div class="third" style="top:66.666%;left:0;right:0;height:1px"></div>
+    <div class="mid" style="left:50%;top:50%;width:26px;height:1px;transform:translate(-50%,-50%)"></div>
+    <div class="mid" style="left:50%;top:50%;width:1px;height:26px;transform:translate(-50%,-50%)"></div>
+  </div>
+</div>
+
+<div class="rail" id="railL">
+  <div class="grp">
+    <button id="lensW" aria-pressed="false">1&times;<small>wide</small></button>
+    <button id="lensU" aria-pressed="false">0.5&times;<small>ultra</small></button>
+    <button id="zoomUp" disabled>+<small>zoom</small></button>
+    <button id="zoomDn" disabled>&minus;<small id="zoomVal">1.0&times;</small></button>
+  </div>
+  <div class="grp">
+    <button id="holdBtn" aria-pressed="false">HOLD<small id="holdWhat">&mdash;</small></button>
+    <button id="lockBtn" aria-pressed="false"><span id="lockWord">FREE</span><small id="lockHint">taps</small></button>
+  </div>
+</div>
+
+<div class="rail" id="railR">
+  <div class="grp">
+    <div class="stat"><b id="clock">0:00</b><span><i class="dot" id="dot"></i><span id="camState">off</span></span></div>
+    <div class="stat"><b id="res">&mdash;</b><span id="fps">&mdash;</span></div>
+    <div class="stat" id="netStat"><b id="kbps">&mdash;</b><span id="netNote">kbit/s</span></div>
+    <div class="stat" id="crop">&mdash;</div>
+  </div>
+  <div class="grp">
+    <button id="liveBtn" aria-pressed="false">GO<small>live</small></button>
+    <button id="alignBtn" aria-pressed="false">GUIDE<small>setup</small></button>
+    <button id="guardBtn" aria-pressed="false">BAR<small>guard</small></button>
+    <button id="setBtn">SET<small id="modeWord">send</small></button>
+  </div>
+</div>
+
+<div class="sheet" id="startSheet">
+  <h1>Church Camera</h1>
+  <p id="startMsg">Point the phone at the stage, then start.</p>
+  <button id="startBtn">Start camera</button>
+  <p class="err" id="startErr"></p>
+</div>
+
+<div class="sheet off" id="rotateSheet">
+  <h1>Turn the phone sideways</h1>
+  <p>Landscape only. Turn off <b>Portrait Orientation Lock</b> in Control Centre
+     if it will not rotate.</p>
+</div>
+
+<div class="sheet off" id="installSheet">
+  <h1>Add to Home Screen first</h1>
+  <p>Running inside Safari puts the address bar and the toolbar into the picture,
+     and Safari can suspend the camera when it feels like it. Tap <b>Share</b>
+     &rarr; <b>Add to Home Screen</b>, then open <b>Church Camera</b> from the
+     home screen.</p>
+  <button id="anyway">Carry on in Safari</button>
+</div>
+
+<div class="sheet off" id="setSheet">
+  <h1>Settings</h1>
+
+  <label class="field">
+    <span>How the picture gets out</span>
+    <select id="modeSel">
+      <option value="send">Send straight to the laptop (WebRTC)</option>
+      <option value="mirror">AirPlay screen mirroring</option>
+    </select>
+    <p class="note" id="modeNote"></p>
+  </label>
+
+  <label class="field" id="serverField">
+    <span>Laptop address</span>
+    <input id="serverInp" inputmode="url" autocapitalize="off" autocorrect="off"
+           spellcheck="false" placeholder="https://DESKTOP-420E5IV.local:8889">
+    <p class="note">Use <b>https</b>. The <b>.local</b> name works on any wifi
+       and never changes; use the laptop's IP address instead if it will not
+       connect. The laptop's certificate must be trusted on this phone or the
+       connection is refused with no warning &mdash;
+       <a href="cert.html" target="_blank" rel="noopener" style="color:#0a84ff">get the certificate</a>.</p>
+  </label>
+
+  <label class="field" id="rateField">
+    <span>Picture quality</span>
+    <select id="rateSel">
+      <option value="3000">3 Mbit/s &mdash; weak or busy wifi</option>
+      <option value="6000">6 Mbit/s &mdash; normal</option>
+      <option value="9000">9 Mbit/s &mdash; hotspot, phone close by</option>
+    </select>
+  </label>
+
+  <p class="err" id="setErr"></p>
+  <div class="rowset">
+    <button class="ghost" id="testBtn">Test</button>
+    <button id="saveBtn">Save</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+var $ = function(s){ return document.getElementById(s); };
+var store = {
+  get: function(k, d){ try { var v = localStorage.getItem('cc.'+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } },
+  set: function(k, v){ try { localStorage.setItem('cc.'+k, JSON.stringify(v)); } catch(e){} }
+};
+
+var PATH = 'cam';                  // the MediaMTX path name. Matches mediamtx.yml.
+var HOME_BAR = 22;                 // iOS home indicator strip, in CSS px
+
+var S = {
+  mode:   store.get('mode', 'send'),         // 'send' = WebRTC, 'mirror' = AirPlay
+  // the .local name is the one that survives moving to a different wifi, so it
+  // is the default; a plain IP is the fallback when mDNS misbehaves
+  server: store.get('server', 'https://DESKTOP-420E5IV.local:8889'),
+  kbps:   store.get('kbps', 6000),
+  guard:  store.get('guard', true),
+  align:  false,
+  locked: false,
+  lensId: store.get('lensId', null),
+  zoom:   store.get('zoom', null),
+  hold:   store.get('hold', false),
+  holdKeys: [],
+  stream: null,
+  track:  null,
+  caps:   {},
+  t0:     0,
+  pc:     null,
+  sender: null,
+  resource: null,
+  wantLive: false,
+  netState: 'idle',
+  retryAt: 0,
+  lastBytes: 0,
+  lastAt: 0
+};
+
+/* ---------- layout ---------- */
+function layout(){
+  var vw = window.innerWidth, vh = window.innerHeight;
+
+  $('rotateSheet').classList.toggle('off', vw >= vh);
+  if (vw < vh) return;
+
+  // Mirroring is the only mode where the black bars matter, because there the
+  // whole screen is the broadcast. Sending straight out, only the camera track
+  // travels, so the picture can have the full screen.
+  var mirroring = S.mode === 'mirror';
+  var guard  = (mirroring && S.guard) ? HOME_BAR : 0;
+  var availH = vh - guard;
+  var w = Math.round(Math.min(vw, availH * 16 / 9));
+  var h = Math.round(w * 9 / 16);
+
+  var left = Math.round((vw - w) / 2);
+  var top  = Math.round((availH - h) / 2);
+
+  var st = $('stage').style;
+  st.width = w+'px'; st.height = h+'px'; st.left = left+'px'; st.top = top+'px';
+
+  var right = vw - w - left, bottom = vh - h - top;
+  $('railL').style.width = left+'px';
+  $('railR').style.width = right+'px';
+
+  var tight = Math.min(left, right) < 52;
+  $('railL').classList.toggle('hide', tight);
+  $('railR').classList.toggle('hide', tight);
+
+  var pw = function(n){ return (n * 100 / vw).toFixed(1); };
+  var ph = function(n){ return (n * 100 / vh).toFixed(1); };
+  $('crop').innerHTML = 'crop&nbsp;%<br>L '+pw(left)+' R '+pw(right)+
+                        '<br>T '+ph(top)+' B '+ph(bottom);
+}
+
+function paintMode(){
+  var mirroring = S.mode === 'mirror';
+  $('liveBtn').classList.toggle('gone', mirroring);
+  $('alignBtn').classList.toggle('gone', !mirroring);
+  $('guardBtn').classList.toggle('gone', !mirroring);
+  $('crop').style.display = mirroring ? '' : 'none';
+  $('netStat').style.display = mirroring ? 'none' : '';
+  $('modeWord').textContent = mirroring ? 'mirror' : 'send';
+  $('guardBtn').setAttribute('aria-pressed', String(S.guard));
+  layout();
+}
+
+/* ---------- camera ---------- */
+function openCamera(deviceId){
+  var video = { width:{ideal:1920}, height:{ideal:1080}, frameRate:{ideal:30} };
+  if (deviceId) video.deviceId = { exact: deviceId };
+  else          video.facingMode = { ideal: 'environment' };
+
+  return navigator.mediaDevices.getUserMedia({ audio:false, video:video }).then(function(stream){
+    var old = S.stream;
+    S.stream = stream;
+    S.track  = stream.getVideoTracks()[0];
+    S.caps   = S.track.getCapabilities ? (S.track.getCapabilities() || {}) : {};
+    $('cam').srcObject = stream;
+    var p = $('cam').play(); if (p && p.catch) p.catch(function(){});
+
+    S.lensId = S.track.getSettings().deviceId || deviceId || null;
+    store.set('lensId', S.lensId);
+
+    // swap the track under a live connection rather than tearing it down, so
+    // changing lens mid-service does not drop the stream
+    var swap = (S.sender && S.sender.replaceTrack)
+      ? S.sender.replaceTrack(S.track).catch(function(){})
+      : Promise.resolve();
+
+    return swap.then(function(){
+      if (old) old.getTracks().forEach(function(t){ t.stop(); });
+      return listLenses();
+    });
+  }).then(function(){
+    wireCapabilities();
+    return S.hold ? applyHold(true) : null;
+  }).then(function(){
+    readSettings();
+  });
+}
+
+function listLenses(){
+  return navigator.mediaDevices.enumerateDevices().catch(function(){ return []; }).then(function(all){
+    var devs = all.filter(function(d){ return d.kind === 'videoinput'; });
+    var find = function(re){ return devs.filter(function(d){ return re.test(d.label); })[0]; };
+    // plain "Back Camera" is the fixed wide lens. The Dual/Triple packs swap
+    // lens on their own mid-shot, which is the last thing a locked-off camera
+    // wants, so they are only a fallback.
+    var wide  = find(/^back camera$/i) || find(/back (dual |triple )?wide/i) || find(/back/i);
+    var ultra = find(/ultra ?wide/i);
+    var cur   = S.track ? S.track.getSettings().deviceId : null;
+
+    var set = function(btn, dev){
+      if (!dev){ btn.disabled = true; btn.setAttribute('aria-pressed','false'); return; }
+      btn.disabled = false;
+      btn.dataset.id = dev.deviceId;
+      btn.setAttribute('aria-pressed', String(dev.deviceId === cur));
+    };
+    set($('lensW'), wide);
+    set($('lensU'), ultra);
+  });
+}
+
+function wireCapabilities(){
+  var z = S.caps.zoom;
+  var hasZoom = !!(z && typeof z.max === 'number' && z.max > (z.min || 1));
+  $('zoomUp').disabled = !hasZoom;
+  $('zoomDn').disabled = !hasZoom;
+  $('zoomVal').textContent = hasZoom ? fmtZoom() : 'n/a';
+
+  S.holdKeys = ['focusMode','exposureMode','whiteBalanceMode'].filter(function(k){
+    return Array.isArray(S.caps[k]) &&
+           (S.caps[k].indexOf('manual') >= 0 || S.caps[k].indexOf('single-shot') >= 0);
+  });
+  $('holdBtn').disabled = S.holdKeys.length === 0;
+  $('holdWhat').textContent = S.holdKeys.length ? initials(S.holdKeys) : 'n/a';
+  $('holdBtn').setAttribute('aria-pressed', String(S.hold && S.holdKeys.length > 0));
+}
+
+function initials(keys){ return keys.map(function(k){ return k[0].toUpperCase(); }).join(''); }
+
+function fmtZoom(){
+  var s = S.track ? S.track.getSettings() : {};
+  var v = (S.zoom !== null && S.zoom !== undefined ? S.zoom : s.zoom) || 1;
+  return (Math.round(v*10)/10).toFixed(1)+'×';
+}
+
+function nudgeZoom(dir){
+  var z = S.caps.zoom;
+  if (!z || !S.track) return Promise.resolve();
+  var step = z.step || ((z.max - z.min) / 20) || 0.1;
+  var min  = z.min || 1;
+  var now  = (S.zoom !== null && S.zoom !== undefined) ? S.zoom : (S.track.getSettings().zoom || min);
+  var next = Math.min(z.max, Math.max(min, now + dir*step));
+  // book the new value before the async call: a quick double-tap otherwise
+  // reads the old one twice and only moves one step
+  var prev = S.zoom;
+  S.zoom = next;
+  $('zoomVal').textContent = fmtZoom();
+  return S.track.applyConstraints({ advanced:[{ zoom: next }] }).then(function(){
+    store.set('zoom', next);
+  }).catch(function(){
+    S.zoom = prev;
+    $('zoomVal').textContent = fmtZoom();
+  });
+}
+
+/* Freeze focus / exposure / white balance so stage lighting cannot make the
+   picture breathe mid-song. Only whatever this iOS build actually exposes. */
+function applyHold(on){
+  if (!S.track || !S.holdKeys.length) return Promise.resolve();
+  var got = [];
+  var chain = Promise.resolve();
+  S.holdKeys.forEach(function(key){
+    chain = chain.then(function(){
+      var modes = S.caps[key] || [];
+      var want  = on ? (modes.indexOf('manual') >= 0 ? 'manual' : 'single-shot')
+                     : (modes.indexOf('continuous') >= 0 ? 'continuous' : modes[0]);
+      var c = { advanced:[{}] }; c.advanced[0][key] = want;
+      return S.track.applyConstraints(c).then(function(){ got.push(key[0].toUpperCase()); }).catch(function(){});
+    });
+  });
+  return chain.then(function(){
+    S.hold = on; store.set('hold', on);
+    $('holdBtn').setAttribute('aria-pressed', String(on));
+    $('holdWhat').textContent = on ? (got.join('') || 'fail') : initials(S.holdKeys);
+  });
+}
+
+function readSettings(){
+  var s = S.track ? S.track.getSettings() : {};
+  $('res').textContent = (s.width && s.height) ? s.width+'×'+s.height : '—';
+  $('fps').textContent = s.frameRate ? Math.round(s.frameRate)+' fps' : '—';
+}
+
+/* ---------- sending: WHIP to MediaMTX ---------- */
+function whipUrl(){
+  return String(S.server).replace(/\/+$/, '') + '/' + PATH + '/whip';
+}
+
+function setNet(state, note){
+  S.netState = state;
+  var cls = state === 'live' ? 'live' : (state === 'trying' ? 'warn' : (state === 'failed' ? 'bad' : ''));
+  $('dot').className = 'dot ' + cls;
+  $('camState').textContent = note || state;
+}
+
+function iceSettled(pc, ms){
+  if (pc.iceGatheringState === 'complete') return Promise.resolve();
+  return new Promise(function(done){
+    var fin = function(){
+      pc.removeEventListener('icegatheringstatechange', h);
+      clearTimeout(timer); done();
+    };
+    var h = function(){ if (pc.iceGatheringState === 'complete') fin(); };
+    pc.addEventListener('icegatheringstatechange', h);
+    // no STUN here, so host candidates appear at once; the timeout is only a
+    // safety net for a build that never reports 'complete'
+    var timer = setTimeout(fin, ms);
+  });
+}
+
+function capBandwidth(sdp, kbps){
+  // belt and braces alongside setParameters: some Safari builds only honour
+  // one of the two
+  return sdp.replace(/(m=video[^\r\n]*\r?\n(?:c=[^\r\n]*\r?\n)?)/, function(m){
+    return /b=AS:/.test(m) ? m : m + 'b=AS:' + kbps + '\r\n';
+  });
+}
+
+function goLive(){
+  if (!S.track) return Promise.reject(new Error('camera not started'));
+  teardown();
+  S.wantLive = true;
+  setNet('trying', 'connecting');
+
+  var pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: 'max-bundle' });
+  S.pc = pc;
+
+  var tx = pc.addTransceiver(S.track, { direction: 'sendonly' });
+  S.sender = tx.sender;
+
+  // Prefer H.264. MediaMTX then hands it to Streamlabs over RTSP untouched;
+  // anything else would mean a re-encode somewhere with nothing to gain.
+  try {
+    var capsv = RTCRtpSender.getCapabilities ? RTCRtpSender.getCapabilities('video') : null;
+    if (capsv && tx.setCodecPreferences){
+      var h264 = capsv.codecs.filter(function(c){ return /h264/i.test(c.mimeType); });
+      var rest = capsv.codecs.filter(function(c){ return !/h264/i.test(c.mimeType); });
+      if (h264.length) tx.setCodecPreferences(h264.concat(rest));
+    }
+  } catch(e){}
+
+  try {
+    var p = tx.sender.getParameters();
+    if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+    p.encodings[0].maxBitrate = S.kbps * 1000;
+    p.degradationPreference = 'maintain-resolution';
+    tx.sender.setParameters(p);
+  } catch(e){}
+
+  pc.addEventListener('connectionstatechange', onConnState);
+
+  return pc.createOffer().then(function(offer){
+    offer.sdp = capBandwidth(offer.sdp, S.kbps);
+    return pc.setLocalDescription(offer);
+  }).then(function(){
+    return iceSettled(pc, 3000);
+  }).then(function(){
+    return fetch(whipUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: pc.localDescription.sdp
+    });
+  }).then(function(res){
+    if (!res.ok) throw new Error('laptop answered ' + res.status);
+    var loc = res.headers.get('Location');      // needs CORS to expose it; not fatal
+    if (loc){ try { S.resource = new URL(loc, whipUrl()).href; } catch(e){} }
+    return res.text();
+  }).then(function(sdp){
+    return pc.setRemoteDescription({ type:'answer', sdp: sdp });
+  }).then(function(){
+    S.lastBytes = 0; S.lastAt = 0;
+  });
+}
+
+function onConnState(){
+  if (!S.pc) return;
+  var st = S.pc.connectionState;
+  if (st === 'connected'){ setNet('live', 'live'); S.retryAt = 0; }
+  else if (st === 'connecting'){ setNet('trying', 'connecting'); }
+  else if (st === 'failed' || st === 'closed' || st === 'disconnected'){
+    if (S.wantLive){ setNet('failed', 'dropped'); scheduleRetry(); }
+    else setNet('idle', 'off');
+  }
+}
+
+function scheduleRetry(){
+  if (!S.wantLive || S.retryAt) return;
+  S.retryAt = Date.now() + 2500;
+}
+
+function teardown(){
+  if (S.resource){
+    // best effort; the connection closing tells MediaMTX anyway
+    try { fetch(S.resource, { method:'DELETE' }).catch(function(){}); } catch(e){}
+    S.resource = null;
+  }
+  if (S.pc){
+    try { S.pc.removeEventListener('connectionstatechange', onConnState); } catch(e){}
+    try { S.pc.close(); } catch(e){}
+  }
+  S.pc = null; S.sender = null;
+}
+
+function stopLive(){
+  S.wantLive = false; S.retryAt = 0;
+  teardown();
+  setNet('idle', 'off');
+  $('kbps').textContent = '—';
+}
+
+function pollStats(){
+  if (!S.pc || !S.pc.getStats) return;
+  S.pc.getStats().then(function(report){
+    var out = null;
+    report.forEach(function(r){ if (r.type === 'outbound-rtp' && r.kind === 'video') out = r; });
+    if (!out) return;
+    var now = out.timestamp || Date.now();
+    if (S.lastAt && now > S.lastAt){
+      var kb = (out.bytesSent - S.lastBytes) * 8 / (now - S.lastAt);   // bits per ms = kbit/s
+      $('kbps').textContent = Math.max(0, Math.round(kb)).toString();
+    }
+    S.lastBytes = out.bytesSent; S.lastAt = now;
+    if (out.frameWidth && out.frameHeight){
+      $('res').textContent = out.frameWidth + '×' + out.frameHeight;
+    }
+    if (typeof out.framesPerSecond === 'number'){
+      $('fps').textContent = Math.round(out.framesPerSecond) + ' fps';
+    }
+    // the picture softening under load shows up here before anyone sees it
+    if (out.qualityLimitationReason && out.qualityLimitationReason !== 'none'){
+      $('netNote').textContent = out.qualityLimitationReason;
+    } else {
+      $('netNote').textContent = 'kbit/s';
+    }
+  }).catch(function(){});
+}
+
+/* ---------- keep the screen on ---------- */
+var wake = null;
+function keepAwake(){
+  if (!('wakeLock' in navigator)) return Promise.resolve();
+  if (wake && !wake.released) return Promise.resolve();
+  return navigator.wakeLock.request('screen').then(function(w){ wake = w; }).catch(function(){});
+}
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) keepAwake(); });
+
+/* ---------- controls ---------- */
+function on(id, fn){
+  $(id).addEventListener('click', function(ev){
+    ev.preventDefault();
+    if (S.locked) return;
+    fn(ev);
+  });
+}
+
+on('lensW', function(e){ var id = e.currentTarget.dataset.id; if (id) openCamera(id).catch(function(){}); });
+on('lensU', function(e){ var id = e.currentTarget.dataset.id; if (id) openCamera(id).catch(function(){}); });
+on('zoomUp', function(){ nudgeZoom(+1); });
+on('zoomDn', function(){ nudgeZoom(-1); });
+on('holdBtn', function(){ applyHold(!S.hold); });
+
+on('alignBtn', function(){
+  S.align = !S.align;
+  $('align').classList.toggle('on', S.align);
+  $('alignBtn').setAttribute('aria-pressed', String(S.align));
+});
+
+on('guardBtn', function(){
+  S.guard = !S.guard; store.set('guard', S.guard);
+  $('guardBtn').setAttribute('aria-pressed', String(S.guard));
+  layout();
+});
+
+on('liveBtn', function(){
+  if (S.wantLive){ stopLive(); $('liveBtn').setAttribute('aria-pressed','false'); $('liveBtn').firstChild.nodeValue = 'GO'; return; }
+  $('liveBtn').setAttribute('aria-pressed','true');
+  $('liveBtn').firstChild.nodeValue = 'STOP';
+  goLive().catch(function(err){
+    setNet('failed', 'no link');
+    $('netNote').textContent = 'check SET';
+    scheduleRetry();
+  });
+});
+
+on('setBtn', function(){ openSettings(); });
+
+/* Tap lock: one tap locks, press and hold 1.2s unlocks. Stops a sleeve or an
+   elbow changing the shot halfway through the sermon. */
+(function(){
+  var btn = $('lockBtn'), timer = null;
+  function paint(){
+    btn.setAttribute('aria-pressed', String(S.locked));
+    $('lockWord').textContent = S.locked ? 'LOCKED' : 'FREE';
+    $('lockHint').textContent = S.locked ? 'hold 1s' : 'taps';
+  }
+  btn.addEventListener('click', function(e){
+    e.preventDefault();
+    if (!S.locked){ S.locked = true; paint(); }
+  });
+  function down(){ if (S.locked) timer = setTimeout(function(){ S.locked = false; paint(); }, 1200); }
+  function up(){ if (timer){ clearTimeout(timer); timer = null; } }
+  btn.addEventListener('touchstart', down, {passive:true});
+  btn.addEventListener('touchend', up);
+  btn.addEventListener('touchcancel', up);
+  btn.addEventListener('mousedown', down);
+  btn.addEventListener('mouseup', up);
+  paint();
+})();
+
+/* ---------- settings ---------- */
+function openSettings(){
+  $('modeSel').value   = S.mode;
+  $('serverInp').value = S.server;
+  $('rateSel').value   = String(S.kbps);
+  $('setErr').textContent = '';
+  paintSettings();
+  $('setSheet').classList.remove('off');
+}
+
+function paintSettings(){
+  var sending = $('modeSel').value === 'send';
+  $('serverField').style.display = sending ? '' : 'none';
+  $('rateField').style.display   = sending ? '' : 'none';
+  $('modeNote').textContent = sending
+    ? 'The camera goes straight to MediaMTX. Best picture, and no screen mirroring involved.'
+    : 'The phone mirrors its whole screen to the laptop. Slower and softer, but it needs no certificate.';
+}
+$('modeSel').addEventListener('change', paintSettings);
+
+$('testBtn').addEventListener('click', function(){
+  var err = $('setErr');
+  err.style.color = '#98989d';
+  err.textContent = 'testing…';
+  var url = String($('serverInp').value).replace(/\/+$/, '') + '/' + PATH + '/whip';
+  fetch(url, { method:'OPTIONS' }).then(function(res){
+    err.style.color = '#32d74b';
+    err.textContent = 'Laptop answered (' + res.status + '). Certificate is trusted.';
+  }).catch(function(){
+    err.style.color = '#ff453a';
+    err.innerHTML = 'No answer. Either the address is wrong, MediaMTX is not ' +
+                    'running, or this phone does not trust the laptop’s certificate. ' +
+                    '<a href="cert.html" target="_blank" rel="noopener" style="color:#0a84ff">Fix the certificate</a>.';
+  });
+});
+
+$('saveBtn').addEventListener('click', function(){
+  var wasLive = S.wantLive;
+  stopLive();
+  S.mode   = $('modeSel').value;
+  S.server = String($('serverInp').value).trim() || S.server;
+  S.kbps   = parseInt($('rateSel').value, 10) || 6000;
+  store.set('mode', S.mode); store.set('server', S.server); store.set('kbps', S.kbps);
+  $('setSheet').classList.add('off');
+  $('liveBtn').setAttribute('aria-pressed','false');
+  $('liveBtn').firstChild.nodeValue = 'GO';
+  paintMode();
+  if (wasLive && S.mode === 'send'){ $('liveBtn').click(); }
+});
+
+/* ---------- start ---------- */
+$('startBtn').addEventListener('click', function(){
+  $('startErr').textContent = '';
+  var done = function(){
+    keepAwake();
+    $('startSheet').classList.add('off');
+    S.t0 = Date.now();
+    paintMode();
+    setNet('idle', 'off');
+  };
+  openCamera(S.lensId).then(done).catch(function(err){
+    // a saved lens id goes stale when iOS re-enumerates; fall back to any rear cam
+    if (S.lensId){
+      S.lensId = null; store.set('lensId', null);
+      return openCamera(null).then(done).catch(show);
+    }
+    show(err);
+  });
+  function show(err){
+    $('startErr').textContent = err && err.name === 'NotAllowedError'
+      ? 'Camera blocked. Settings → Church Camera → Camera → Allow, then reopen.'
+      : ((err && err.name ? err.name + ': ' : '') + (err && err.message ? err.message : 'camera failed'));
+  }
+});
+
+$('anyway').addEventListener('click', function(){ $('installSheet').classList.add('off'); });
+
+/* ---------- housekeeping ---------- */
+setInterval(function(){
+  if (S.t0){
+    var s = Math.floor((Date.now() - S.t0)/1000);
+    $('clock').textContent = Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  }
+
+  if (S.mode === 'mirror'){
+    // in mirror mode there is nothing to connect to, so the dot only reports
+    // whether the camera itself is still running
+    if (S.track) { var ok = S.track.readyState === 'live' && !S.track.muted;
+                   readSettings(); setNet(ok ? 'live' : 'idle', ok ? 'camera ok' : 'no camera'); }
+    return;
+  }
+
+  if (S.wantLive && S.retryAt && Date.now() >= S.retryAt){
+    S.retryAt = 0;
+    setNet('trying', 'retrying');
+    goLive().catch(function(){ setNet('failed', 'no link'); scheduleRetry(); });
+  }
+  if (S.pc) pollStats(); else if (S.track) readSettings();
+}, 1000);
+
+window.addEventListener('resize', layout);
+window.addEventListener('orientationchange', function(){ setTimeout(layout, 250); });
+window.addEventListener('pagehide', function(){ teardown(); });
+
+var standalone = window.navigator.standalone === true ||
+                 window.matchMedia('(display-mode: standalone)').matches;
+if (!standalone) $('installSheet').classList.remove('off');
+
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  $('startMsg').innerHTML = 'This browser will not hand a page the camera. Open ' +
+    'the page in <b>Safari</b> over <b>https</b>, then Add to Home Screen.';
+  $('startBtn').disabled = true;
+}
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+paintMode();
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Church Camera — certificate</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{
+    background:#000;color:#c9c9cd;
+    font:400 16px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    padding:32px 20px calc(48px + env(safe-area-inset-bottom));
+    max-width:34em;margin:0 auto;
+  }
+  h1{color:#fff;font-size:24px;font-weight:700;letter-spacing:-.015em;margin-bottom:6px}
+  .sub{color:#6e6e74;font-size:14px;margin-bottom:26px}
+  a.btn{
+    display:block;text-align:center;text-decoration:none;
+    background:#fff;color:#000;font-weight:650;font-size:17px;
+    padding:17px;border-radius:13px;margin:0 0 10px;
+  }
+  a.btn:active{background:#d8d8d8}
+  .after{font-size:13px;color:#6e6e74;text-align:center;margin-bottom:30px}
+  ol{margin:0 0 26px 20px}
+  li{margin-bottom:13px;padding-left:3px}
+  b{color:#fff;font-weight:600}
+  .flag{
+    border:1px solid #5a1020;background:#1a0a0e;border-radius:11px;
+    padding:15px 17px;margin:26px 0;font-size:15px;color:#f0c8d0;
+  }
+  .flag b{color:#ff6b7f}
+  h2{color:#fff;font-size:15px;font-weight:650;margin:30px 0 9px}
+  p{margin-bottom:11px}
+  .fine{font-size:13px;color:#5c5c5e;border-top:1px solid #1e1e22;padding-top:18px;margin-top:34px}
+  code{font:500 14px/1 ui-monospace,Menlo,monospace;background:#1c1c20;color:#e8e8ea;padding:2px 6px;border-radius:5px}
+</style>
+</head>
+<body>
+
+<h1>Trust the laptop</h1>
+<p class="sub">One time, on the camera phone only. Three minutes.</p>
+
+<a class="btn" href="church-camera-ca.crt" download>Download the certificate</a>
+<p class="after">Tap <b>Allow</b> when iOS asks about a configuration profile.</p>
+
+<ol>
+  <li>Tap the button above. iOS saves it and says a profile was downloaded.</li>
+  <li>Open <b>Settings</b>. Near the top: <b>Profile Downloaded</b> &rarr; tap it
+      &rarr; <b>Install</b> &rarr; enter your passcode &rarr; <b>Install</b> again.</li>
+  <li>Still in Settings: <b>General</b> &rarr; <b>About</b> &rarr; scroll to the
+      bottom &rarr; <b>Certificate Trust Settings</b> &rarr; switch
+      <b>ON</b> next to <b>Church Camera Local CA</b>.</li>
+</ol>
+
+<div class="flag">
+  <b>Step 3 is the one everybody misses.</b> Installing the profile on its own
+  does nothing at all — iOS keeps the certificate but will not trust it until
+  that switch is on, and the camera app then fails exactly the same silent way
+  as if you had never installed it.
+</div>
+
+<h2>Then check it worked</h2>
+<p>Open <b>Church Camera</b> &rarr; <b>SET</b> &rarr; <b>Test</b>. Green means
+the phone reached the laptop and trusted it. Red still means one of the two is
+wrong — and the laptop has to be switched on and on the same wifi for the test
+to mean anything.</p>
+
+<h2>If tapping the button only downloads a file</h2>
+<p>Some iOS versions will not start the install from a download. Open the
+<b>Files</b> app &rarr; <b>Downloads</b> &rarr; tap
+<code>church-camera-ca.crt</code>, then carry on from step 2.</p>
+
+<h2>If it says the profile is not signed</h2>
+<p>That is expected and fine. It is a certificate we made ourselves, on the
+laptop, for the laptop — there is no outside authority to sign it, and none is
+wanted.</p>
+
+<p class="fine">
+  This file is only the public half. It lets this phone recognise the church
+  laptop; it grants nothing to anyone else and carries no secret. The private
+  half never leaves the laptop. Install it on the camera phone and nowhere else,
+  and if the laptop is ever replaced or lost, remove it under Settings &rarr;
+  General &rarr; VPN &amp; Device Management.
+</p>
+
+</body>
+</html>
