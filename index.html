@@ -667,9 +667,12 @@ function paintSettings(){
   var sending = $('modeSel').value === 'send';
   $('serverField').style.display = sending ? '' : 'none';
   $('rateField').style.display   = sending ? '' : 'none';
-  $('modeNote').textContent = sending
-    ? 'The camera goes straight to MediaMTX. Best picture, and no screen mirroring involved.'
-    : 'The phone mirrors its whole screen to the laptop. Slower and softer, but it needs no certificate.';
+  $('modeNote').innerHTML = sending
+    ? 'Only the camera picture leaves the phone. Nothing else on screen can ' +
+      'reach the stream — not these controls, not a notification. Best picture too.'
+    : 'Mirroring sends the <b>whole screen</b>, so a notification banner lands ' +
+      'in the middle of the broadcast. Turn on a <b>Focus</b> before the service. ' +
+      'Softer picture, but it needs no certificate.';
 }
 $('modeSel').addEventListener('change', paintSettings);
 
