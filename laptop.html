@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Church Camera — laptop setup</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-text-size-adjust:100%}
+  body{
+    background:#000;color:#c9c9cd;
+    font:400 16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+    padding:34px 20px calc(56px + env(safe-area-inset-bottom));
+    max-width:40em;margin:0 auto;
+  }
+  h1{color:#fff;font-size:26px;font-weight:700;letter-spacing:-.018em;margin-bottom:6px}
+  .sub{color:#6e6e74;font-size:14.5px;margin-bottom:28px}
+  a.btn{
+    display:block;text-align:center;text-decoration:none;
+    background:#fff;color:#000;font-weight:650;font-size:17px;
+    padding:18px;border-radius:13px;margin-bottom:8px;
+  }
+  a.btn:active{background:#d8d8d8}
+  .after{font-size:13px;color:#6e6e74;text-align:center;margin-bottom:34px}
+  h2{color:#fff;font-size:17px;font-weight:650;margin:34px 0 10px;letter-spacing:-.008em}
+  h2 .n{color:#5c5c5e;font-variant-numeric:tabular-nums;margin-right:9px}
+  p{margin-bottom:12px}
+  ul{margin:0 0 12px 20px}
+  li{margin-bottom:7px}
+  b{color:#fff;font-weight:600}
+  code{font:500 14px/1.45 ui-monospace,Consolas,Menlo,monospace;background:#1c1c20;color:#e8e8ea;padding:2px 6px;border-radius:5px;word-break:break-all}
+  pre{background:#121215;border:1px solid #1e1e22;border-radius:10px;padding:13px 15px;overflow-x:auto;margin-bottom:12px}
+  pre code{background:none;padding:0;font-size:13.5px;word-break:normal}
+  .flag{
+    border:1px solid #5a1020;background:#1a0a0e;border-radius:11px;
+    padding:16px 18px;margin:22px 0;font-size:15px;color:#f0c8d0;
+  }
+  .flag b{color:#ff6b7f}
+  .calm{
+    border:1px solid #1e2c1e;background:#0d140d;border-radius:11px;
+    padding:16px 18px;margin:22px 0;font-size:15px;color:#b8d8bc;
+  }
+  .calm b{color:#7fd48a}
+  .fine{font-size:13px;color:#5c5c5e;border-top:1px solid #1e1e22;padding-top:20px;margin-top:40px}
+  .fine a{color:#5c5c5e}
+  a{color:#0a84ff}
+</style>
+</head>
+<body>
+
+<h1>Set up the laptop</h1>
+<p class="sub">The receiving end. About twenty minutes, done once per laptop.</p>
+
+<a class="btn" href="https://github.com/CodeKing12/church-camera/releases/latest/download/church-laptop.zip">Download church-laptop.zip</a>
+<p class="after">30&nbsp;MB · Windows · no USB drive needed</p>
+
+<h2><span class="n">1</span>Unzip it</h2>
+<p>Unzip to <code>C:\church-stream</code>. Not inside Downloads — some of this
+   registers itself against a fixed path, so it should not move afterwards.</p>
+
+<h2><span class="n">2</span>Copy one file over by hand</h2>
+<p>The package deliberately leaves out <code>webrtc\certs\ca.key</code>. That is
+   the private half of the certificate authority, and publishing it would let
+   anyone issue certificates your phone trusts.</p>
+<p>Get it from the laptop that already works — it is a 1.7&nbsp;KB text file, so
+   email it to yourself or drop it in Drive. Put it next to <code>ca.crt</code>
+   in <code>webrtc\certs\</code>.</p>
+<div class="calm">
+  <b>Worth the trouble.</b> With that file present, this laptop gets a
+  certificate signed by the authority your phone <i>already</i> trusts — so the
+  phone needs nothing done to it at all. Without it, a new authority is created
+  and every phone has to be set up again from scratch.
+</div>
+
+<h2><span class="n">3</span>Run one file</h2>
+<p>Double-click <b>SETUP-NEW-LAPTOP.bat</b> and click <b>Yes</b> on the prompts.
+   It will:</p>
+<ul>
+  <li>clear the "downloaded from the internet" tag Windows puts on every file</li>
+  <li>open the firewall on <b>all</b> network types — church wifi is filed as
+      <i>Public</i>, and the pop-up Windows shows by default only offers Private,
+      so the phone would be blocked with no explanation</li>
+  <li>install <b>Bonjour</b>, which is what lets the phone find this laptop by
+      name instead of by a number that changes</li>
+  <li>make this laptop's certificate</li>
+  <li>set the receiver to start at login and put the <b>Camera</b> status window
+      on screen</li>
+  <li>print the one line to type into the phone</li>
+</ul>
+<p>Nothing else needs installing. The package carries its own copy of
+   <code>openssl</code>, so this laptop does not need Git or anything else.</p>
+
+<h2><span class="n">4</span>Point the phone at it</h2>
+<p>On the phone: <b>Church Camera → SET → Laptop address</b>, and type whatever
+   the setup printed. It looks like this:</p>
+<pre><code>https://that-laptop-name.local:8889</code></pre>
+<p>Then <b>Test</b>. Green means reachable and trusted. Nothing else on the phone
+   changes — not the certificate, not the home screen icon.</p>
+
+<h2><span class="n">5</span>Add it to Streamlabs</h2>
+<div class="flag">
+  <b>The camera is not a camera.</b> It arrives over the network, so it will
+  never show up under <i>Video Capture Device</i> and there is nothing to pick
+  from a list.
+</div>
+<p><b>Lowest delay</b> — run <code>webrtc\trust-ca-on-this-pc.ps1</code> once and
+   restart Streamlabs, then Add Source → <b>Browser Source</b>:</p>
+<pre><code>file:///C:/church-stream/webrtc/whep-player.html</code></pre>
+<p>1920 × 1080, and untick <b>Shutdown source when not visible</b>. This keeps
+   the picture inside WebRTC the whole way and skips a buffering step.</p>
+<p><b>Simplest, and the fallback</b> — Add Source → <b>Media Source</b>, untick
+   <code>Local File</code>, then Input:</p>
+<pre><code>rtsp://127.0.0.1:8554/cam</code></pre>
+<p>Network buffering <code>1</code> MB, hardware decoding on, "Close file when
+   inactive" off. Keep this one in a second scene whichever you use.</p>
+
+<h2><span class="n">6</span>Line the sound up</h2>
+<p>Open <code>sync\sync-ruler.html</code> and follow it. Sixty seconds, once per
+   laptop — the number is different on every machine. It gives you the
+   <b>Sync Offset</b> to put on the desk audio source in Streamlabs.</p>
+
+<h2>Then check and leave it</h2>
+<ul>
+  <li>The <b>Camera</b> window should read <b>ALL GOOD</b> while the phone is
+      broadcasting, and <b>Streamlabs: connected</b> once the source exists.</li>
+  <li>Reboot, and confirm the receiver and the Camera window both come back on
+      their own.</li>
+</ul>
+
+<p class="fine">
+  Full notes are inside the zip: <b>CHURCH-LAPTOP.md</b> for this, and
+  <b>LATENCY.md</b> for where the delay actually goes.
+  Setting up a phone instead? <a href="cert.html">Certificate</a> ·
+  <a href="./">the camera app</a>.
+</p>
+
+</body>
+</html>

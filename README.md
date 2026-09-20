@@ -30,6 +30,16 @@ no way to click through. `cert.html` walks through installing it.
 It is useless to anyone else; generate your own with the script in the wider
 setup rather than trusting this one.
 
+## The receiving end
+
+The Windows side — MediaMTX, certificates, the low-latency WHEP player for a
+Streamlabs Browser Source, and a status window for whoever runs the service —
+is packaged as a release: **[church-laptop.zip](../../releases/latest)**.
+Instructions at [laptop.html](https://codeking12.github.io/church-camera/laptop.html).
+
+It contains no private keys. The certificate authority's private half never
+leaves the machine that generated it.
+
 ## Running it yourself
 
 Host these files anywhere with https, then point the app at your own MediaMTX:
