@@ -49,6 +49,17 @@
   #railL{left:0;padding-left:calc(4px + env(safe-area-inset-left))}
   #railR{right:0;padding-right:calc(4px + env(safe-area-inset-right))}
   .rail.hide{visibility:hidden}
+  /* held upright there are no side bars to put the controls in, so the rails
+     lie across the top and bottom instead */
+  .rail.horiz{
+    top:auto;bottom:auto;left:0;right:0;height:var(--railH);
+    flex-direction:row;
+    padding:4px calc(6px + env(safe-area-inset-right)) 4px calc(6px + env(safe-area-inset-left));
+  }
+  #railL.horiz{top:0;padding-top:calc(4px + env(safe-area-inset-top))}
+  #railR.horiz{bottom:0;padding-bottom:calc(4px + env(safe-area-inset-bottom))}
+  .rail.horiz .grp{flex-direction:row;width:auto}
+  .rail.horiz button{min-width:52px}
   .grp{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center}
 
   button{
@@ -158,9 +169,12 @@
 </div>
 
 <div class="sheet off" id="rotateSheet">
-  <h1>Turn the phone sideways</h1>
-  <p>Landscape only. Turn off <b>Portrait Orientation Lock</b> in Control Centre
-     if it will not rotate.</p>
+  <h1>Sideways is better here</h1>
+  <p>In <b>mirror</b> mode the whole screen is what goes out, so holding the
+     phone upright broadcasts an upright picture with the stage squeezed into
+     a strip. Turn the phone sideways &mdash; and turn off <b>Portrait
+     Orientation Lock</b> in Control Centre if it will not rotate.</p>
+  <button id="portraitAnyway" class="ghost">Use it upright anyway</button>
 </div>
 
 <div class="sheet off" id="installSheet">
@@ -230,6 +244,7 @@ var S = {
   server: store.get('server', 'https://DESKTOP-420E5IV.local:8889'),
   kbps:   store.get('kbps', 6000),
   guard:  store.get('guard', true),
+  portraitOk: store.get('portraitOk', false),
   align:  false,
   locked: false,
   lensId: store.get('lensId', null),
@@ -251,39 +266,58 @@ var S = {
 };
 
 /* ---------- layout ---------- */
+var RAIL_H = 62;   // a row of controls, when they cannot go down the sides
+
 function layout(){
   var vw = window.innerWidth, vh = window.innerHeight;
-
-  $('rotateSheet').classList.toggle('off', vw >= vh);
-  if (vw < vh) return;
-
-  // Mirroring is the only mode where the black bars matter, because there the
-  // whole screen is the broadcast. Sending straight out, only the camera track
-  // travels, so the picture can have the full screen.
   var mirroring = S.mode === 'mirror';
-  var guard  = (mirroring && S.guard) ? HOME_BAR : 0;
-  var availH = vh - guard;
-  var w = Math.round(Math.min(vw, availH * 16 / 9));
-  var h = Math.round(w * 9 / 16);
+  var portrait  = vw < vh;
 
-  var left = Math.round((vw - w) / 2);
-  var top  = Math.round((availH - h) / 2);
+  // Upright only actually breaks one thing, and only in one mode: mirroring
+  // sends the whole screen, so an upright screen makes an upright broadcast.
+  // Sending is unaffected - only the camera track leaves, and that is landscape
+  // however the phone is held. So say so where it matters, let it be overridden,
+  // and otherwise get out of the way.
+  var nag = portrait && mirroring && !S.portraitOk;
+  $('rotateSheet').classList.toggle('off', !nag);
+  if (nag) return;
+
+  $('railL').classList.toggle('horiz', portrait);
+  $('railR').classList.toggle('horiz', portrait);
+
+  var guard = (mirroring && S.guard) ? HOME_BAR : 0;
+  var availH, w, h, left, top;
+
+  if (portrait) {
+    document.documentElement.style.setProperty('--railH', RAIL_H + 'px');
+    availH = vh - guard - RAIL_H * 2;
+    w = Math.round(Math.min(vw, availH * 16 / 9));
+    h = Math.round(w * 9 / 16);
+    left = Math.round((vw - w) / 2);
+    top  = RAIL_H + Math.round((availH - h) / 2);
+    $('railL').style.width = ''; $('railR').style.width = '';
+    $('railL').classList.remove('hide');
+    $('railR').classList.remove('hide');
+  } else {
+    availH = vh - guard;
+    w = Math.round(Math.min(vw, availH * 16 / 9));
+    h = Math.round(w * 9 / 16);
+    left = Math.round((vw - w) / 2);
+    top  = Math.round((availH - h) / 2);
+    $('railL').style.width = left + 'px';
+    $('railR').style.width = (vw - w - left) + 'px';
+    var tight = Math.min(left, vw - w - left) < 52;
+    $('railL').classList.toggle('hide', tight);
+    $('railR').classList.toggle('hide', tight);
+  }
 
   var st = $('stage').style;
   st.width = w+'px'; st.height = h+'px'; st.left = left+'px'; st.top = top+'px';
 
-  var right = vw - w - left, bottom = vh - h - top;
-  $('railL').style.width = left+'px';
-  $('railR').style.width = right+'px';
-
-  var tight = Math.min(left, right) < 52;
-  $('railL').classList.toggle('hide', tight);
-  $('railR').classList.toggle('hide', tight);
-
   var pw = function(n){ return (n * 100 / vw).toFixed(1); };
   var ph = function(n){ return (n * 100 / vh).toFixed(1); };
-  $('crop').innerHTML = 'crop&nbsp;%<br>L '+pw(left)+' R '+pw(right)+
-                        '<br>T '+ph(top)+' B '+ph(bottom);
+  $('crop').innerHTML = 'crop&nbsp;%<br>L '+pw(left)+' R '+pw(vw - w - left)+
+                        '<br>T '+ph(top)+' B '+ph(vh - h - top);
 }
 
 function paintMode(){
@@ -588,7 +622,20 @@ function keepAwake(){
   if (wake && !wake.released) return Promise.resolve();
   return navigator.wakeLock.request('screen').then(function(w){ wake = w; }).catch(function(){});
 }
-document.addEventListener('visibilitychange', function(){ if (!document.hidden) keepAwake(); });
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) return;
+  keepAwake();
+  if (!S.wantLive) return;
+  // Coming back from the background, iOS may have stopped the camera track and
+  // may have dropped the connection without ever telling us. Put both right
+  // here, rather than leaving a frozen picture at the other end that looks for
+  // all the world like the stream is still running.
+  if (!S.track || S.track.readyState === 'ended'){
+    openCamera(S.lensId).then(function(){ if (S.wantLive) goLive(); }).catch(function(){});
+  } else if (!S.pc || S.pc.connectionState !== 'connected'){
+    goLive();
+  }
+});
 
 /* ---------- controls ---------- */
 function on(id, fn){
@@ -732,6 +779,11 @@ $('startBtn').addEventListener('click', function(){
 });
 
 $('anyway').addEventListener('click', function(){ $('installSheet').classList.add('off'); });
+$('portraitAnyway').addEventListener('click', function(){
+  S.portraitOk = true;
+  store.set('portraitOk', true);
+  layout();
+});
 
 /* ---------- housekeeping ---------- */
 setInterval(function(){
@@ -758,7 +810,13 @@ setInterval(function(){
 
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', function(){ setTimeout(layout, 250); });
-window.addEventListener('pagehide', function(){ teardown(); });
+window.addEventListener('pagehide', function(){
+  // iOS fires this when the phone merely locks, or the app is swiped away for a
+  // moment. Tearing down here meant a phone asleep on a tripod quietly ended the
+  // broadcast - and because teardown() unhooks the state listener before closing,
+  // nothing was left to notice or retry. Let go only when we were not on air.
+  if (!S.wantLive) teardown();
+});
 
 var standalone = window.navigator.standalone === true ||
                  window.matchMedia('(display-mode: standalone)').matches;
