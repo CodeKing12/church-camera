@@ -38,6 +38,10 @@
   #align .edge{position:absolute;inset:0;border:2px solid #ff00d4}
   #align .third{position:absolute;background:rgba(255,255,255,.28)}
   #align .mid{position:absolute;background:rgba(255,0,212,.9)}
+  /* where the top and bottom of the shot get cut off in FILL */
+  #align .safe{position:absolute;left:0;right:0;height:0;display:none;
+               border-top:1px dashed rgba(255,159,10,.95)}
+  #align.showsafe .safe{display:block}
 
   /* ---- operator rails ---- */
   .rail{
@@ -61,6 +65,20 @@
   .rail.horiz .grp{flex-direction:row;width:auto}
   .rail.horiz button{min-width:52px}
   .grp{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center}
+
+  /* ---- clean: the picture, and nothing else at all ----
+     A screen mirror carries whatever is on the glass, so the only way to keep
+     the controls off the broadcast is to stop drawing them. */
+  body.clean .rail{display:none}
+  body.clean #align{display:none}
+  #cleanHint{
+    position:fixed;left:50%;z-index:15;pointer-events:none;
+    bottom:calc(6px + env(safe-area-inset-bottom));
+    transform:translateX(-50%);
+    font-size:10px;letter-spacing:.07em;color:#3a3a3c;
+    opacity:1;transition:opacity 1s linear;
+  }
+  #cleanHint.off{display:none}
 
   button{
     font:600 11px/1 -apple-system,system-ui,sans-serif;color:var(--rail-hi);
@@ -130,8 +148,12 @@
     <div class="third" style="top:66.666%;left:0;right:0;height:1px"></div>
     <div class="mid" style="left:50%;top:50%;width:26px;height:1px;transform:translate(-50%,-50%)"></div>
     <div class="mid" style="left:50%;top:50%;width:1px;height:26px;transform:translate(-50%,-50%)"></div>
+    <div class="safe" id="safeT" style="top:0"></div>
+    <div class="safe" id="safeB" style="bottom:0"></div>
   </div>
 </div>
+
+<div id="cleanHint" class="off">PRESS AND HOLD FOR THE CONTROLS</div>
 
 <div class="rail" id="railL">
   <div class="grp">
@@ -156,7 +178,10 @@
   <div class="grp">
     <button id="liveBtn" aria-pressed="false">GO<small>live</small></button>
     <button id="alignBtn" aria-pressed="false">GUIDE<small>setup</small></button>
+    <button id="cleanBtn" aria-pressed="false">CLEAN<small>hide UI</small></button>
+    <button id="fillBtn" aria-pressed="false"><span id="fillWord">FIT</span><small>shape</small></button>
     <button id="guardBtn" aria-pressed="false">BAR<small>guard</small></button>
+    <button id="airBtn" class="gone" aria-pressed="false">AIR<small>play</small></button>
     <button id="setBtn">SET<small id="modeWord">send</small></button>
   </div>
 </div>
@@ -244,6 +269,8 @@ var S = {
   server: store.get('server', 'https://DESKTOP-420E5IV.local:8889'),
   kbps:   store.get('kbps', 6000),
   guard:  store.get('guard', true),
+  clean:  false,                             // picture only, controls not drawn
+  fill:   store.get('fill', false),          // false = whole frame, bars at the sides
   portraitOk: store.get('portraitOk', false),
   align:  false,
   locked: false,
@@ -268,6 +295,31 @@ var S = {
 /* ---------- layout ---------- */
 var RAIL_H = 62;   // a row of controls, when they cannot go down the sides
 
+/* Where the picture sits. Worked out for any mode, not only the one on screen,
+   because the crop figures the operator needs are the CLEAN ones and they have
+   to be readable while the rails are still up. */
+function geom(clean){
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var portrait = vw < vh;
+  var guard = (S.mode === 'mirror' && S.guard) ? HOME_BAR : 0;
+  var availH = vh - guard, top0 = 0;
+
+  // FILL hands the whole screen to the picture: nothing to crop downstream, at
+  // the cost of the top and bottom of the shot, because a phone screen is a
+  // good deal wider than 16:9.
+  if (clean && S.fill) return { w:vw, h:availH, left:0, top:0, vw:vw, vh:vh };
+
+  if (!clean && portrait){ availH -= RAIL_H * 2; top0 = RAIL_H; }
+  var w = Math.round(Math.min(vw, availH * 16 / 9));
+  var h = Math.round(w * 9 / 16);
+  return {
+    w:w, h:h,
+    left: Math.round((vw - w) / 2),
+    top:  top0 + Math.round((availH - h) / 2),
+    vw:vw, vh:vh
+  };
+}
+
 function layout(){
   var vw = window.innerWidth, vh = window.innerHeight;
   var mirroring = S.mode === 'mirror';
@@ -278,46 +330,54 @@ function layout(){
   // Sending is unaffected - only the camera track leaves, and that is landscape
   // however the phone is held. So say so where it matters, let it be overridden,
   // and otherwise get out of the way.
-  var nag = portrait && mirroring && !S.portraitOk;
+  var nag = portrait && mirroring && !S.portraitOk && !S.clean;
   $('rotateSheet').classList.toggle('off', !nag);
   if (nag) return;
 
   $('railL').classList.toggle('horiz', portrait);
   $('railR').classList.toggle('horiz', portrait);
+  if (portrait) document.documentElement.style.setProperty('--railH', RAIL_H + 'px');
 
-  var guard = (mirroring && S.guard) ? HOME_BAR : 0;
-  var availH, w, h, left, top;
+  var g = geom(S.clean);
+  var st = $('stage').style;
+  st.width = g.w+'px'; st.height = g.h+'px'; st.left = g.left+'px'; st.top = g.top+'px';
 
-  if (portrait) {
-    document.documentElement.style.setProperty('--railH', RAIL_H + 'px');
-    availH = vh - guard - RAIL_H * 2;
-    w = Math.round(Math.min(vw, availH * 16 / 9));
-    h = Math.round(w * 9 / 16);
-    left = Math.round((vw - w) / 2);
-    top  = RAIL_H + Math.round((availH - h) / 2);
+  if (!portrait && !S.clean){
+    $('railL').style.width = g.left + 'px';
+    $('railR').style.width = (vw - g.w - g.left) + 'px';
+    var tight = Math.min(g.left, vw - g.w - g.left) < 52;
+    $('railL').classList.toggle('hide', tight);
+    $('railR').classList.toggle('hide', tight);
+  } else {
     $('railL').style.width = ''; $('railR').style.width = '';
     $('railL').classList.remove('hide');
     $('railR').classList.remove('hide');
-  } else {
-    availH = vh - guard;
-    w = Math.round(Math.min(vw, availH * 16 / 9));
-    h = Math.round(w * 9 / 16);
-    left = Math.round((vw - w) / 2);
-    top  = Math.round((availH - h) / 2);
-    $('railL').style.width = left + 'px';
-    $('railR').style.width = (vw - w - left) + 'px';
-    var tight = Math.min(left, vw - w - left) < 52;
-    $('railL').classList.toggle('hide', tight);
-    $('railR').classList.toggle('hide', tight);
   }
 
-  var st = $('stage').style;
-  st.width = w+'px'; st.height = h+'px'; st.left = left+'px'; st.top = top+'px';
+  paintCrop();
+}
 
-  var pw = function(n){ return (n * 100 / vw).toFixed(1); };
-  var ph = function(n){ return (n * 100 / vh).toFixed(1); };
-  $('crop').innerHTML = 'crop&nbsp;%<br>L '+pw(left)+' R '+pw(vw - w - left)+
-                        '<br>T '+ph(top)+' B '+ph(vh - h - top);
+/* What Streamlabs has to cut off the mirrored window to be left with just the
+   picture - the figures for CLEAN, which is what will actually be on air. */
+function paintCrop(){
+  var c = geom(true);
+  var pct = function(n, of){ return (n * 100 / of).toFixed(1); };
+  // whatever black is left over, whichever mode - FILL still leaves the strip
+  // the home indicator sits on, and calling that "no crop" would be a lie
+  var L = c.left, R = c.vw - c.w - c.left, T = c.top, B = c.vh - c.h - c.top;
+  $('crop').innerHTML = (L + R + T + B < 2)
+    ? 'no crop<br>fills the window'
+    : 'crop&nbsp;%<br>L '+pct(L,c.vw)+' R '+pct(R,c.vw)+
+      '<br>T '+pct(T,c.vh)+' B '+pct(B,c.vh);
+
+  // In FILL the screen is wider than the camera frame, so the top and bottom of
+  // the shot never leave the phone. Draw the line while there is still time to
+  // reframe, rather than letting it be discovered on the stream.
+  var shown = S.fill ? Math.min(1, c.h / (c.w * 9 / 16)) : 1;
+  var band  = (1 - shown) / 2 * 100;
+  $('safeT').style.top    = band.toFixed(2) + '%';
+  $('safeB').style.bottom = band.toFixed(2) + '%';
+  $('align').classList.toggle('showsafe', band > 0.3);
 }
 
 function paintMode(){
@@ -325,10 +385,33 @@ function paintMode(){
   $('liveBtn').classList.toggle('gone', mirroring);
   $('alignBtn').classList.toggle('gone', !mirroring);
   $('guardBtn').classList.toggle('gone', !mirroring);
+  $('cleanBtn').classList.toggle('gone', !mirroring);
+  $('fillBtn').classList.toggle('gone', !mirroring);
   $('crop').style.display = mirroring ? '' : 'none';
   $('netStat').style.display = mirroring ? 'none' : '';
   $('modeWord').textContent = mirroring ? 'mirror' : 'send';
   $('guardBtn').setAttribute('aria-pressed', String(S.guard));
+  $('fillBtn').setAttribute('aria-pressed', String(S.fill));
+  $('fillWord').textContent = S.fill ? 'FILL' : 'FIT';
+  if (!mirroring && S.clean) setClean(false);
+  layout();
+}
+
+/* CLEAN stops drawing everything except the picture, so a screen mirror has
+   nothing else to carry. Getting back out takes a deliberate press and hold: a
+   sleeve brushing the glass mid-service must not put the buttons on air. */
+var hintTimer = null;
+function setClean(on){
+  S.clean = on;
+  document.body.classList.toggle('clean', on);
+  $('cleanBtn').setAttribute('aria-pressed', String(on));
+  var hint = $('cleanHint');
+  hint.classList.toggle('off', !on);
+  clearTimeout(hintTimer);
+  if (on){
+    hint.style.opacity = '1';
+    hintTimer = setTimeout(function(){ hint.style.opacity = '0'; }, 4000);
+  }
   layout();
 }
 
@@ -664,6 +747,52 @@ on('guardBtn', function(){
   layout();
 });
 
+on('cleanBtn', function(){ setClean(true); });
+
+on('fillBtn', function(){
+  S.fill = !S.fill; store.set('fill', S.fill);
+  $('fillBtn').setAttribute('aria-pressed', String(S.fill));
+  $('fillWord').textContent = S.fill ? 'FILL' : 'FIT';
+  layout();
+});
+
+/* The way back out of CLEAN. Deliberately a press and hold and deliberately
+   anywhere on the glass - there is no button left to aim at, and a tap has to
+   stay harmless while the screen is on air. */
+(function(){
+  var timer = null;
+  function down(){
+    if (!S.clean || timer) return;
+    timer = setTimeout(function(){ timer = null; setClean(false); }, 900);
+  }
+  function up(){ if (timer){ clearTimeout(timer); timer = null; } }
+  document.addEventListener('touchstart', down, {passive:true});
+  document.addEventListener('touchend', up);
+  document.addEventListener('touchcancel', up);
+  document.addEventListener('mousedown', down);
+  document.addEventListener('mouseup', up);
+})();
+
+/* The genuinely clean route, where the phone offers it: hand the video element
+   itself to an AirPlay target instead of mirroring the screen. Then nothing
+   else on the phone travels with it - no controls, no status bar, no home
+   indicator, and no crop needed at the far end. Safari will not do this for
+   every kind of source, so the button only appears once a target has actually
+   been reported, rather than sitting there promising something that fails. */
+(function(){
+  var v = $('cam');
+  if (!v.webkitShowPlaybackTargetPicker) return;
+  v.addEventListener('webkitplaybacktargetavailabilitychanged', function(e){
+    $('airBtn').classList.toggle('gone', e.availability !== 'available');
+  });
+  v.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', function(){
+    var out = !!v.webkitCurrentPlaybackTargetIsWireless;
+    $('airBtn').setAttribute('aria-pressed', String(out));
+    if (out) setNet('live', 'airplay');
+  });
+  on('airBtn', function(){ try { v.webkitShowPlaybackTargetPicker(); } catch(e){} });
+})();
+
 on('liveBtn', function(){
   if (S.wantLive){ stopLive(); $('liveBtn').setAttribute('aria-pressed','false'); $('liveBtn').firstChild.nodeValue = 'GO'; return; }
   $('liveBtn').setAttribute('aria-pressed','true');
@@ -719,7 +848,8 @@ function paintSettings(){
       'reach the stream — not these controls, not a notification. Best picture too.'
     : 'Mirroring sends the <b>whole screen</b>, so a notification banner lands ' +
       'in the middle of the broadcast. Turn on a <b>Focus</b> before the service. ' +
-      'Softer picture, but it needs no certificate.';
+      'Tap <b>CLEAN</b> once the shot is framed and the controls stop being drawn, ' +
+      'so only the picture is mirrored. Softer picture, but it needs no certificate.';
 }
 $('modeSel').addEventListener('change', paintSettings);
 
